@@ -1,0 +1,40 @@
+/* ========== THEME VARIATIONS ========== */
+body.dark-mode {
+    background: #1a1a1a;
+    color: #C0C0C0;
+}
+
+body.light-mode {
+    background: #f8f9fa;
+    color: #333333;
+}
+
+body.light-mode .container {
+    background: #ffffff;
+    box-shadow: 0 0 30px rgba(0,0,0,0.1);
+}
+
+body.vivid-mode {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+}
+
+body.light-mode .customer-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    color: #333333;
+}
+
+body.light-mode .customer-name {
+    color: #333333;
+}
+
+body.light-mode .stat-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+body.light-mode .profile-section {
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(0, 0, 0, 0.1);
+}
