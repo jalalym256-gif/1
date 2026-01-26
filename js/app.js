@@ -876,254 +876,355 @@ function printFullTable() {
     }
     
     const customer = customers[currentCustomerIndex];
-    
-    // Create a new window for printing
     const printWindow = window.open('', '_blank');
+    
     if (!printWindow) {
         Utils.showNotification('لطفاً popup blocker را غیرفعال کنید', 'error');
         return;
     }
     
-    // Get current date and time
+    // تاریخ شمسی
     const now = new Date();
-    const persianDate = new Intl.DateTimeFormat('fa-IR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    }).format(now);
+    const persianDate = now.toLocaleDateString('fa-IR');
     
-    // Prepare model column (vertical)
-    const modelsColumn = `
-        <div class="model-column">
-            <div class="model-cell">مدل ها</div>
-            <div class="model-cell">${customer.models.yakhun || '---'}</div>
-            <div class="model-cell">${customer.models.sleeve || '---'}</div>
-            ${customer.models.skirt.map(skirt => `<div class="model-cell">${skirt}</div>`).join('')}
-            ${customer.models.features.map(feature => `<div class="model-cell">${feature}</div>`).join('')}
-            ${customer.models.skirt.length === 0 && customer.models.features.length === 0 ? '<div class="model-cell">---</div>' : ''}
-        </div>
-    `;
+    // آماده‌سازی مدل‌ها برای ستون سمت چپ
+    const models = [
+        customer.models.yakhun || '---',
+        customer.models.sleeve || '---',
+        ...(customer.models.skirt || []),
+        ...(customer.models.features || [])
+    ];
     
-    // Prepare measurements table with merged columns
-    const measurementsTable = `
-        <table class="print-table">
-            <thead>
-                <tr>
-                    <th>اندازه</th>
-                    <th>مقدار</th>
-                    <th>اندازه</th>
-                    <th>مقدار</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Row 1 -->
-                <tr>
-                    <td>قد</td>
-                    <td>${customer.measurements.قد || '---'}</td>
-                    <td>شانه یک</td>
-                    <td>${customer.measurements.شانه_یک || '---'}</td>
-                </tr>
-                <!-- Row 2 -->
-                <tr>
-                    <td>شانه دو</td>
-                    <td>${customer.measurements.شانه_دو || '---'}</td>
-                    <td>آستین یک</td>
-                    <td>${customer.measurements.آستین_یک || '---'}</td>
-                </tr>
-                <!-- Row 3 -->
-                <tr>
-                    <td>آستین دو</td>
-                    <td>${customer.measurements.آستین_دو || '---'}</td>
-                    <td>آستین سه</td>
-                    <td>${customer.measurements.آستین_سه || '---'}</td>
-                </tr>
-                <!-- Row 4 -->
-                <tr>
-                    <td>بغل</td>
-                    <td>${customer.measurements.بغل || '---'}</td>
-                    <td>دامن</td>
-                    <td>${customer.measurements.دامن || '---'}</td>
-                </tr>
-                <!-- Row 5 -->
-                <tr>
-                    <td>گردن</td>
-                    <td>${customer.measurements.گردن || '---'}</td>
-                    <td>دور سینه</td>
-                    <td>${customer.measurements.دور_سینه || '---'}</td>
-                </tr>
-                <!-- Row 6 -->
-                <tr>
-                    <td>شلوار</td>
-                    <td>${customer.measurements.شلوار || '---'}</td>
-                    <td>دم پاچه</td>
-                    <td>${customer.measurements.دم_پاچه || '---'}</td>
-                </tr>
-                <!-- Row 7: Merged column for تعداد سفارش و مقدار تکه -->
-                <tr>
-                    <td>بر تهمان</td>
-                    <td>${customer.measurements.بر_تمبان || '---'}</td>
-                    <td class="merged-cell">
-                        <div class="merged-row">تعداد سفارش</div>
-                        <div class="merged-row">${customer.measurements.تعداد_سفارش || '---'}</div>
-                        <div class="merged-row">مقدار تکه</div>
-                        <div class="merged-row">${customer.measurements.مقدار_تکه || '---'}</div>
-                    </td>
-                </tr>
-                <!-- Row 8: Merged column for چاک پتی و دور سینه -->
-                <tr>
-                    <td>خشتک</td>
-                    <td>${customer.measurements.خشتک || '---'}</td>
-                    <td class="merged-cell">
-                        <div class="merged-row">چاک پتی</div>
-                        <div class="merged-row">${customer.measurements.چاک_پتی || '---'}</div>
-                        <div class="merged-row">دور سینه</div>
-                        <div class="merged-row">${customer.measurements.دور_سینه || '---'}</div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    `;
+    // اگر کمتر از 7 مدل داریم، خطوط خالی اضافه کنیم
+    while (models.length < 7) {
+        models.push('---');
+    }
     
-    // Write the print content
     printWindow.document.write(`
         <!DOCTYPE html>
-        <html lang="fa" dir="rtl">
+        <html dir="rtl" lang="fa">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>چاپ لیبل اندازه - ${customer.name}</title>
             <style>
                 @media print {
-                    body {
-                        font-family: Tahoma, Arial, sans-serif;
-                        margin: 0;
-                        padding: 10px;
-                        font-size: 14px;
-                        line-height: 1.4;
+                    @page {
+                        size: A4;
+                        margin: 10mm;
                     }
                     
-                    .print-header {
+                    body {
+                        font-family: 'B Nazanin', Tahoma, Arial, sans-serif;
+                        margin: 0;
+                        padding: 0;
+                        font-size: 14pt;
+                        line-height: 1.5;
+                        background: white;
+                        color: black;
+                    }
+                    
+                    .print-container {
+                        width: 100%;
+                        max-width: 190mm;
+                        margin: 0 auto;
+                        padding: 5mm;
+                    }
+                    
+                    .header-section {
                         text-align: center;
-                        margin-bottom: 20px;
+                        margin-bottom: 8mm;
+                        padding-bottom: 4mm;
                         border-bottom: 2px solid #000;
-                        padding-bottom: 10px;
+                    }
+                    
+                    .header-title {
+                        font-size: 18pt;
+                        font-weight: bold;
+                        margin-bottom: 3mm;
                     }
                     
                     .customer-info {
                         display: flex;
                         justify-content: space-between;
-                        margin-bottom: 15px;
-                        font-weight: bold;
+                        flex-wrap: wrap;
+                        margin-bottom: 6mm;
+                        font-size: 12pt;
                     }
                     
-                    .print-container {
+                    .info-item {
+                        margin: 1mm 0;
+                        white-space: nowrap;
+                    }
+                    
+                    .content-wrapper {
                         display: flex;
-                        gap: 20px;
+                        gap: 5mm;
+                        margin-top: 5mm;
                     }
                     
-                    .model-column {
-                        border: 1px solid #000;
-                        width: 120px;
+                    .models-column {
+                        width: 45mm;
+                        border: 2px solid #000;
+                        border-left: none;
+                    }
+                    
+                    .models-header {
+                        background: #f0f0f0;
+                        padding: 4mm;
                         text-align: center;
+                        font-weight: bold;
+                        font-size: 13pt;
+                        border-bottom: 2px solid #000;
                     }
                     
-                    .model-cell {
-                        padding: 8px 4px;
+                    .model-row {
+                        padding: 4mm 2mm;
+                        text-align: center;
                         border-bottom: 1px solid #ccc;
-                        min-height: 40px;
+                        min-height: 10mm;
                         display: flex;
                         align-items: center;
                         justify-content: center;
+                        font-size: 12pt;
                     }
                     
-                    .model-cell:last-child {
+                    .model-row:last-child {
                         border-bottom: none;
                     }
                     
-                    .print-table {
+                    .measurements-section {
                         flex: 1;
-                        border-collapse: collapse;
-                        width: 100%;
-                        border: 1px solid #000;
                     }
                     
-                    .print-table th,
-                    .print-table td {
-                        border: 1px solid #000;
-                        padding: 8px;
-                        text-align: center;
-                        vertical-align: middle;
-                        min-width: 80px;
+                    .measurement-row {
+                        display: flex;
+                        margin-bottom: 3mm;
+                        align-items: stretch;
                     }
                     
-                    .print-table th {
-                        background-color: #f0f0f0;
+                    .measurement-label {
+                        width: 35mm;
                         font-weight: bold;
+                        text-align: left;
+                        padding-left: 3mm;
+                        display: flex;
+                        align-items: center;
+                        font-size: 12pt;
                     }
                     
-                    .merged-cell {
-                        padding: 0 !important;
+                    .measurement-values {
+                        flex: 1;
+                        display: flex;
+                        gap: 2mm;
                     }
                     
-                    .merged-row {
-                        padding: 4px;
-                        border-bottom: 1px solid #ccc;
-                        min-height: 20px;
+                    .value-box {
+                        flex: 1;
+                        border: 1px solid #000;
+                        padding: 3mm;
+                        text-align: center;
                         display: flex;
                         align-items: center;
                         justify-content: center;
+                        min-height: 10mm;
+                        background: white;
+                        font-size: 12pt;
                     }
                     
-                    .merged-row:last-child {
-                        border-bottom: none;
+                    .double-box {
+                        display: flex;
+                        flex-direction: column;
+                        border: 1px solid #000;
+                        padding: 0;
+                        flex: 1;
                     }
                     
-                    .print-footer {
-                        margin-top: 20px;
+                    .double-label {
+                        padding: 2mm;
                         text-align: center;
-                        font-size: 12px;
+                        font-size: 10pt;
                         color: #666;
-                        border-top: 1px solid #ccc;
-                        padding-top: 10px;
+                        border-bottom: 1px solid #ccc;
+                        background: #f9f9f9;
                     }
                     
-                    @page {
-                        size: A4;
-                        margin: 10mm;
+                    .double-value {
+                        padding: 3mm;
+                        text-align: center;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex: 1;
+                        font-size: 12pt;
                     }
+                    
+                    .notes-section {
+                        margin-top: 8mm;
+                        padding: 4mm;
+                        border: 1px dashed #ccc;
+                        background: #f9f9f9;
+                        font-size: 11pt;
+                    }
+                }
+                
+                /* For screen preview */
+                body {
+                    font-family: 'B Nazanin', Tahoma, Arial, sans-serif;
+                    margin: 20px;
+                    padding: 20px;
+                    font-size: 14pt;
+                    line-height: 1.5;
+                    background: white;
+                    color: black;
+                    border: 1px solid #ccc;
                 }
             </style>
         </head>
         <body>
-            <div class="print-header">
-                <h1 style="margin: 0; font-size: 18px;">لیبل اندازه‌های مشتری</h1>
-            </div>
-            
-            <div class="customer-info">
-                <div>کد مشتری: ${customer.id || '---'}</div>
-                <div>نام: ${customer.name}</div>
-                <div>تلفن: ${customer.phone}</div>
-                <div>تاریخ: ${persianDate}</div>
-            </div>
-            
             <div class="print-container">
-                ${modelsColumn}
-                ${measurementsTable}
-            </div>
-            
-            <div class="print-footer">
-                <p>سیستم مدیریت خیاطی ALFAJR - نسخه حرفه‌ای</p>
+                <div class="header-section">
+                    <div class="header-title">لیبل اندازه‌های مشتری</div>
+                    <div>سیستم خیاطی ALFAJR - نسخه حرفه‌ای</div>
+                </div>
+                
+                <div class="customer-info">
+                    <div class="info-item"><strong>آیدی:</strong> ${customer.id || '---'}</div>
+                    <div class="info-item"><strong>نام مشتری:</strong> ${customer.name}</div>
+                    <div class="info-item"><strong>تاریخ:</strong> ${persianDate}</div>
+                    <div class="info-item"><strong>شماره:</strong> ${customer.phone}</div>
+                </div>
+                
+                <div class="content-wrapper">
+                    <!-- ستون اندازه‌ها (سمت راست) -->
+                    <div class="measurements-section">
+                        <!-- ردیف 1: قد -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">قد</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.قد || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 2: شانه (دو فیلد) -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">شانه</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.شانه_یک || '---'}</div>
+                                <div class="value-box">${customer.measurements.شانه_دو || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 3: آستین (سه فیلد) -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">آستین</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.آستین_یک || '---'}</div>
+                                <div class="value-box">${customer.measurements.آستین_دو || '---'}</div>
+                                <div class="value-box">${customer.measurements.آستین_سه || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 4: بغل -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">بغل</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.بغل || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 5: دامن -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">دامن</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.دامن || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 6: گردن -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">گردن</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.گردن || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 7: چاک پتی و دور سینه -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">چاک پتی</div>
+                            <div class="measurement-values">
+                                <div class="double-box">
+                                    <div class="double-value">${customer.measurements.چاک_پتی || '---'}</div>
+                                    <div class="double-label">دور سینه</div>
+                                    <div class="double-value">${customer.measurements.دور_سینه || '---'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 8: شلوار -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">شلوار</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.شلوار || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 9: دم پاچه -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">دم پاچه</div>
+                            <div class="measurement-values">
+                                <div class="value-box">${customer.measurements.دم_پاچه || '---'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 10: بر تهمان و خشتک -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">بر تهمان</div>
+                            <div class="measurement-values">
+                                <div class="double-box">
+                                    <div class="double-value">${customer.measurements.بر_تمبان || '---'}</div>
+                                    <div class="double-label">خشتک</div>
+                                    <div class="double-value">${customer.measurements.خشتک || '---'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ردیف 11: تعداد سفارش و مقدار تکه -->
+                        <div class="measurement-row">
+                            <div class="measurement-label">تعداد سفارش</div>
+                            <div class="measurement-values">
+                                <div class="double-box">
+                                    <div class="double-value">${customer.measurements.تعداد_سفارش || '---'}</div>
+                                    <div class="double-label">مقدار تکه</div>
+                                    <div class="double-value">${customer.measurements.مقدار_تکه || '---'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ستون مدل‌ها (سمت چپ) -->
+                    <div class="models-column">
+                        <div class="models-header">مدل ها</div>
+                        ${models.slice(0, 7).map(model => `
+                            <div class="model-row">${model}</div>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                ${customer.notes ? `
+                    <div class="notes-section">
+                        <strong>توضیحات:</strong> ${customer.notes}
+                    </div>
+                ` : ''}
             </div>
             
             <script>
                 window.onload = function() {
-                    window.print();
                     setTimeout(function() {
-                        window.close();
-                    }, 1000);
+                        window.print();
+                        setTimeout(function() {
+                            window.close();
+                        }, 500);
+                    }, 300);
                 };
             </script>
         </body>
