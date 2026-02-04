@@ -23,51 +23,45 @@
 </head>
 <body class="dark-mode">
     <!-- Loading Overlay -->
-    <div id="loadingOverlay">
+    <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
-        <div id="loadingText">در حال راه‌اندازی سیستم ALFAJR...</div>
+        <div id="loadingText" class="loading-text">در حال راه‌اندازی سیستم...</div>
     </div>
 
     <!-- Global Notification -->
-    <div id="globalNotification"></div>
-
-    <!-- Database Status -->
-    <div id="dbStatus" class="db-status">
-        <i class="fas fa-database"></i>
-        <span>در حال اتصال به دیتابیس...</span>
-    </div>
+    <div id="globalNotification" class="notification-container"></div>
 
     <!-- Settings Menu -->
     <div class="settings-menu">
-        <button class="settings-btn" onclick="toggleSettings()">
+        <button class="settings-btn" onclick="App.toggleSettings()">
             <i class="fas fa-cog"></i>
         </button>
         <div class="settings-dropdown" id="settingsDropdown">
-            <button onclick="saveDataToFile()">
+            <button onclick="App.exportData()">
                 <i class="fas fa-save"></i>
                 ذخیره پشتیبان
             </button>
-            <button onclick="document.getElementById('fileInput').click()">
+            <button onclick="App.triggerFileImport()">
                 <i class="fas fa-folder-open"></i>
                 بازیابی پشتیبان
             </button>
-            <button onclick="toggleDarkMode()">
+            <button onclick="App.setTheme('dark')">
                 <i class="fas fa-moon"></i>
                 حالت تاریک
             </button>
-            <button onclick="toggleLightMode()">
+            <button onclick="App.setTheme('light')">
                 <i class="fas fa-sun"></i>
                 حالت روشن
             </button>
-            <button onclick="toggleVividMode()">
+            <button onclick="App.setTheme('vivid')">
                 <i class="fas fa-palette"></i>
                 حالت ویوید
             </button>
-            <button onclick="optimizeDatabase()">
+            <button onclick="App.optimizeDatabase()">
                 <i class="fas fa-broom"></i>
-                بهینه‌سازی دیتابیس
+                بهینه‌سازی
             </button>
-            <button onclick="clearAllData()" class="delete-btn">
+            <button onclick="App.clearAllData()" class="delete-btn">
                 <i class="fas fa-trash"></i>
                 پاک‌سازی کامل
             </button>
@@ -119,11 +113,11 @@
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="جستجو بر اساس نام، شماره تماس، کد یا توضیحات...">
                     <div class="search-buttons">
-                        <button class="btn-primary" onclick="searchCustomer()">
+                        <button class="btn-primary" onclick="App.searchCustomers()">
                             <i class="fas fa-search"></i>
                             جستجو
                         </button>
-                        <button class="btn-success" onclick="addCustomer()">
+                        <button class="btn-success" onclick="App.addCustomer()">
                             <i class="fas fa-user-plus"></i>
                             مشتری جدید
                         </button>
@@ -138,12 +132,11 @@
                     <h3>لیست مشتریان</h3>
                 </div>
                 <div id="customerList">
-                    <!-- Customer cards will be loaded here -->
                     <div class="empty-state">
                         <i class="fas fa-users"></i>
                         <h3>هنوز مشتری ثبت نشده است</h3>
                         <p>برای شروع، روی دکمه "مشتری جدید" کلیک کنید</p>
-                        <button class="btn-primary" onclick="addCustomer()" style="margin-top: 20px;">
+                        <button class="btn-primary" onclick="App.addCustomer()" style="margin-top: 20px;">
                             <i class="fas fa-user-plus"></i> افزودن اولین مشتری
                         </button>
                     </div>
@@ -154,7 +147,7 @@
         <!-- Profile Page -->
         <div id="profilePage" style="display: none;">
             <!-- Back Button -->
-            <button class="back-button btn-secondary" onclick="backHome()">
+            <button class="back-button btn-secondary" onclick="App.backHome()">
                 <i class="fas fa-arrow-right"></i>
                 بازگشت به لیست
             </button>
@@ -172,11 +165,11 @@
 
                 <!-- Print Buttons -->
                 <div class="print-buttons-container" id="printButtonsContainer">
-                    <button class="btn-primary" onclick="printFullTable()">
+                    <button class="btn-primary" onclick="App.printMeasurementLabel()">
                         <i class="fas fa-print"></i>
                         چاپ لیبل اندازه
                     </button>
-                    <button class="btn-secondary" onclick="printProfessionalInvoice()">
+                    <button class="btn-secondary" onclick="App.printInvoice()">
                         <i class="fas fa-file-invoice"></i>
                         چاپ فاکتور
                     </button>
@@ -193,39 +186,76 @@
 
             <!-- Measurements Section -->
             <div class="profile-section" id="measurementsContainer">
-                <!-- Measurements will be loaded here -->
+                <div class="section-header">
+                    <h3><i class="fas fa-ruler-combined"></i> اندازه‌گیری‌ها</h3>
+                </div>
+                <div class="measurements-grid" id="measurementsGrid">
+                    <!-- اندازه‌گیری‌ها اینجا رندر می‌شوند -->
+                </div>
             </div>
 
             <!-- Models Section -->
             <div class="profile-section" id="modelsContainer">
-                <!-- Models will be loaded here -->
+                <div class="section-header">
+                    <h3><i class="fas fa-tshirt"></i> مدل‌ها</h3>
+                </div>
+                <div class="models-grid" id="modelsGrid">
+                    <!-- مدل‌ها اینجا رندر می‌شوند -->
+                </div>
             </div>
 
             <!-- Price & Delivery Section -->
             <div class="profile-section" id="priceDeliveryContainer">
-                <!-- Price & Delivery will be loaded here -->
+                <div class="price-delivery-grid">
+                    <div class="price-section">
+                        <h4><i class="fas fa-money-bill-wave"></i> قیمت‌گذاری</h4>
+                        <div class="price-input">
+                            <label>قیمت کل (تومان):</label>
+                            <input type="number" id="totalPrice" min="0" step="1000">
+                        </div>
+                        <div class="price-input">
+                            <label>مبلغ پرداخت شده:</label>
+                            <input type="number" id="paidAmount" min="0" step="1000">
+                        </div>
+                    </div>
+                    <div class="delivery-section">
+                        <h4><i class="fas fa-calendar-alt"></i> تحویل</h4>
+                        <div class="delivery-input">
+                            <label>تاریخ تحویل:</label>
+                            <input type="text" id="deliveryDate" placeholder="مثال: ۱۴۰۲/۱۰/۱۵">
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Orders Section -->
             <div class="profile-section" id="ordersContainer">
-                <!-- Orders will be loaded here -->
+                <div class="section-header">
+                    <h3><i class="fas fa-clipboard-list"></i> سفارشات</h3>
+                    <button class="btn-small" onclick="App.addOrder()">
+                        <i class="fas fa-plus"></i> افزودن سفارش
+                    </button>
+                </div>
+                <div id="ordersList">
+                    <!-- سفارشات اینجا رندر می‌شوند -->
+                </div>
             </div>
 
             <!-- Action Buttons -->
             <div class="profile-action-buttons">
-                <button class="btn-primary" onclick="saveCustomer()">
+                <button class="btn-primary" onclick="App.saveCurrentCustomer()">
                     <i class="fas fa-save"></i>
                     ذخیره تغییرات
                 </button>
-                <button class="btn-success" onclick="printFullTable()">
+                <button class="btn-success" onclick="App.printMeasurementLabel()">
                     <i class="fas fa-print"></i>
                     چاپ لیبل اندازه
                 </button>
-                <button class="btn-secondary" onclick="printProfessionalInvoice()">
+                <button class="btn-secondary" onclick="App.printInvoice()">
                     <i class="fas fa-file-invoice"></i>
                     چاپ فاکتور
                 </button>
-                <button class="btn-danger" onclick="deleteCurrentCustomer()">
+                <button class="btn-danger" onclick="App.deleteCurrentCustomer()">
                     <i class="fas fa-trash"></i>
                     حذف مشتری
                 </button>
@@ -235,9 +265,9 @@
 
     <!-- JavaScript Files -->
     <script src="js/utils.js"></script>
-    <script src="js/id-generator.js"></script>
-    <script src="js/customer.js"></script>
     <script src="js/db.js"></script>
+    <script src="js/customer.js"></script>
+    <script src="js/print.js"></script>
     <script src="js/app.js"></script>
     
     <!-- Service Worker Registration -->
@@ -245,9 +275,6 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('service-worker.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registered successfully:', registration.scope);
-                    })
                     .catch(error => {
                         console.log('ServiceWorker registration failed:', error);
                     });
