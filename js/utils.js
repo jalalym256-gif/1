@@ -1,136 +1,129 @@
 // ========== UTILITY FUNCTIONS ==========
-const Utils = {
-    escapeHtml(text) {
-        if (!text) return '';
+
+class Utils {
+    static escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
-    },
+    }
 
-    formatPrice(price) {
-        if (!price && price !== 0) return '۰';
-        return new Intl.NumberFormat('fa-IR').format(price);
-    },
-
-    formatDate(dateString) {
-        if (!dateString) return '';
-        try {
-            const date = new Date(dateString);
-            return date.toLocaleDateString('fa-IR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch (e) {
-            return dateString;
-        }
-    },
-
-    debounce(func, wait) {
+    static debounce(func, wait, immediate = false) {
         let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
+        return function() {
+            const context = this;
+            const args = arguments;
+            
+            const later = function() {
+                timeout = null;
+                if (!immediate) func.apply(context, args);
             };
+            
+            const callNow = immediate && !timeout;
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
+            
+            if (callNow) func.apply(context, args);
         };
-    },
+    }
 
-    showNotification(message, type = 'info', duration = 4000) {
-        const existingNotification = document.getElementById('globalNotification');
-        if (existingNotification) {
-            existingNotification.remove();
-        }
-        
-        const notification = document.createElement('div');
-        notification.id = 'globalNotification';
-        notification.className = `notification ${type}`;
-        
-        const colors = {
-            success: { bg: '#28a745', border: '#28a745' },
-            error: { bg: '#dc3545', border: '#dc3545' },
-            warning: { bg: '#ffc107', border: '#ffc107', text: '#333' },
-            info: { bg: '#17a2b8', border: '#17a2b8' }
-        };
-        
-        const color = colors[type] || colors.info;
-        
-        notification.innerHTML = `
-            <span style="font-size: 20px; font-weight: bold;">${type === 'success' ? '✓' : type === 'error' ? '✗' : type === 'warning' ? '⚠' : 'ℹ'}</span>
-            <span>${this.escapeHtml(message)}</span>
-        `;
-        
-        Object.assign(notification.style, {
-            position: 'fixed',
-            top: '30px',
-            right: '30px',
-            padding: '20px 30px',
-            borderRadius: '12px',
-            color: color.text || 'white',
-            fontWeight: '600',
-            zIndex: '10000',
-            maxWidth: '500px',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
-            fontSize: '15px',
-            transition: 'all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '15px',
-            backdropFilter: 'blur(10px)',
-            borderLeft: `5px solid ${color.border}`,
-            backgroundColor: color.bg,
-            opacity: '0',
-            transform: 'translateX(100px)'
-        });
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            notification.style.opacity = '1';
-            notification.style.transform = 'translateX(0)';
-        }, 10);
-        
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateX(100px)';
-            setTimeout(() => notification.remove(), 500);
-        }, duration);
-    },
-
-    showLoading(message = 'در حال بارگذاری...') {
-        let overlay = document.getElementById('loadingOverlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'loadingOverlay';
-            
-            const spinner = document.createElement('div');
-            spinner.className = 'loading-spinner';
-            
-            const text = document.createElement('div');
-            text.id = 'loadingText';
-            text.textContent = message;
-            
-            overlay.appendChild(spinner);
-            overlay.appendChild(text);
-            document.body.appendChild(overlay);
-        }
-        
-        overlay.style.display = 'flex';
-        document.getElementById('loadingText').textContent = message;
-    },
-
-    hideLoading() {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.style.display = 'none';
-        }
-    },
-
-    async sleep(ms) {
+    static delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
-};
+
+    static formatDate(date) {
+        if (!date) return '';
+        const d = new Date(date);
+        return d.toLocaleDateString('fa-IR');
+    }
+
+    static formatPrice(price) {
+        if (!price) return '۰';
+        return parseInt(price).toLocaleString('fa-IR');
+    }
+
+    static generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+    }
+
+    static validatePhone(phone) {
+        if (!phone) return true;
+        const digits = phone.replace(/\D/g, '');
+        return digits.length >= 10 && digits.length <= 15;
+    }
+
+    static deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+    }
+
+    static showElement(id) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'block';
+    }
+
+    static hideElement(id) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    }
+}
+
+// ========== VALIDATOR CLASS ==========
+class Validator {
+    static validateCustomer(customer) {
+        const errors = [];
+        
+        if (!customer.name || customer.name.trim().length < 2) {
+            errors.push('نام باید حداقل ۲ کاراکتر داشته باشد');
+        }
+        
+        if (customer.name && customer.name.length > 100) {
+            errors.push('نام نمی‌تواند بیش از ۱۰۰ کاراکتر باشد');
+        }
+        
+        if (customer.phone && !Utils.validatePhone(customer.phone)) {
+            errors.push('شماره تماس معتبر نیست');
+        }
+        
+        if (customer.totalPrice) {
+            const price = parseFloat(customer.totalPrice);
+            if (isNaN(price) || price < 0) {
+                errors.push('قیمت باید عدد مثبت باشد');
+            }
+            if (price > 1000000000) {
+                errors.push('قیمت بیش از حد مجاز است');
+            }
+        }
+        
+        if (customer.paidAmount) {
+            const paid = parseFloat(customer.paidAmount);
+            if (isNaN(paid) || paid < 0) {
+                errors.push('مبلغ پرداختی باید عدد مثبت باشد');
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors: errors
+        };
+    }
+}
+
+// ========== CUSTOMER FACTORY ==========
+class CustomerFactory {
+    static createNewCustomer() {
+        const now = new Date();
+        return {
+            id: Utils.generateId(),
+            name: 'مشتری جدید',
+            phone: '',
+            notes: '',
+            measurements: [],
+            models: [],
+            orders: [],
+            totalPrice: 0,
+            paidAmount: 0,
+            deliveryDate: '',
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+        };
+    }
+}
