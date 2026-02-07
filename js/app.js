@@ -1,34 +1,28 @@
 // ========== ALFAJR APP - MAIN APPLICATION ==========
 
-class ALFAJRApp {
-    constructor() {
-        this.customers = [];
-        this.currentCustomerId = null;
-        this.db = null;
-        this.currentTheme = 'dark';
-        this.isSaving = false;
-        this.saveQueue = [];
-        this.lastSaveTime = 0;
-        this.isInitialized = false;
-        
-        // تنظیمات اولیه
-        this.config = {
-            MIN_SAVE_INTERVAL: 1500, // 1.5 ثانیه حداقل فاصله بین ذخیره‌ها
-            AUTO_SAVE_DELAY: 30000, // 30 ثانیه
-            DEBOUNCE_SEARCH: 500,
-            MAX_CUSTOMERS: 1000
-        };
-    }
+const App = {
+    // متغیرهای وضعیت
+    customers: [],
+    currentCustomerId: null,
+    db: null,
+    currentTheme: 'dark',
+    isSaving: false,
+    lastSaveTime: 0,
+    isInitialized: false,
+    
+    config: {
+        MIN_SAVE_INTERVAL: 1500,
+        AUTO_SAVE_DELAY: 30000,
+        DEBOUNCE_SEARCH: 500,
+        MAX_CUSTOMERS: 1000
+    },
 
     // ========== INITIALIZATION ==========
     async initialize() {
         try {
             this.showLoading('در حال راه‌اندازی سیستم ALFAJR...');
             
-            // بررسی قابلیت‌های مرورگر
-            await this.checkBrowserCompatibility();
-            
-            // مقداردهی اولیه دیتابیس
+            // راه‌اندازی دیتابیس
             this.db = new DatabaseManager();
             await this.db.initialize();
             
@@ -36,48 +30,25 @@ class ALFAJRApp {
             await this.loadAllData();
             
             // بارگذاری تنظیمات
-            await this.loadSettings();
-            
-            // راه‌اندازی کامپوننت‌ها
-            this.setupComponents();
+            const theme = await this.db.getSetting('theme') || 'dark';
+            this.setTheme(theme);
             
             // راه‌اندازی event listeners
             this.setupEventListeners();
-            
-            // راه‌اندازی service worker
-            this.initializeServiceWorker();
-            
-            // شروع auto-save
-            this.startAutoSave();
             
             this.isInitialized = true;
             this.hideLoading();
             this.showNotification('سیستم ALFAJR با موفقیت راه‌اندازی شد', 'success');
             
+            console.log('App initialized successfully');
+            
         } catch (error) {
             this.hideLoading();
             this.showNotification(`خطا در راه‌اندازی: ${error.message}`, 'error');
             this.showErrorState(error);
-            throw error;
+            console.error('Initialization error:', error);
         }
-    }
-
-    async checkBrowserCompatibility() {
-        const requirements = {
-            indexedDB: !!window.indexedDB,
-            serviceWorker: 'serviceWorker' in navigator,
-            fetch: !!window.fetch,
-            promises: !!window.Promise
-        };
-
-        const missing = Object.entries(requirements)
-            .filter(([_, available]) => !available)
-            .map(([feature]) => feature);
-
-        if (missing.length > 0) {
-            throw new Error(`مرورگر شما از این قابلیت‌ها پشتیبانی نمی‌کند: ${missing.join(', ')}`);
-        }
-    }
+    },
 
     // ========== DATA MANAGEMENT ==========
     async loadAllData() {
@@ -92,67 +63,59 @@ class ALFAJRApp {
             
         } catch (error) {
             console.error('Error loading data:', error);
-            throw new Error('خطا در بارگذاری داده‌ها');
+            this.showNotification('خطا در بارگذاری داده‌ها', 'error');
         }
-    }
-
-    async loadSettings() {
-        try {
-            const theme = await this.db.getSetting('theme') || 'dark';
-            this.setTheme(theme);
-            
-            const otherSettings = await this.db.getSetting('app_settings') || {};
-            Object.assign(this.config, otherSettings);
-            
-        } catch (error) {
-            console.warn('Could not load settings:', error);
-        }
-    }
+    },
 
     // ========== CUSTOMER MANAGEMENT ==========
     async addCustomer() {
         try {
+            console.log('Adding new customer...');
+            
             const newCustomer = CustomerFactory.createNewCustomer();
             
+            // اعتبارسنجی
             const isValid = Validator.validateCustomer(newCustomer);
             if (!isValid.isValid) {
                 this.showNotification(isValid.errors[0], 'warning');
                 return;
             }
             
-            // اضافه کردن به دیتابیس
+            // ذخیره در دیتابیس
             const savedCustomer = await this.db.saveCustomer(newCustomer);
             
-            // اضافه کردن به لیست
+            // اضافه به لیست
             this.customers.unshift(savedCustomer);
             
-            // رندر مجدد لیست
+            // رندر مجدد
             this.renderCustomerList();
             this.updateStats();
             
             this.showNotification('مشتری جدید با موفقیت افزوده شد', 'success');
             
-            // باز کردن پروفایل مشتری جدید
+            // باز کردن پروفایل
             this.openCustomerProfile(savedCustomer.id);
             
         } catch (error) {
+            console.error('Add customer error:', error);
             this.showNotification(`خطا در افزودن مشتری: ${error.message}`, 'error');
         }
-    }
+    },
 
     async saveCurrentCustomer() {
-        if (!this.currentCustomerId) return;
-        
-        // جلوگیری از save موازی
-        if (this.isSaving) {
-            this.showNotification('در حال ذخیره‌سازی قبلی... لطفاً صبر کنید', 'info');
+        if (!this.currentCustomerId) {
+            this.showNotification('هیچ مشتری انتخاب نشده است', 'warning');
             return;
         }
         
-        // بررسی فاصله زمانی بین saveها
+        if (this.isSaving) {
+            this.showNotification('در حال ذخیره‌سازی... لطفاً صبر کنید', 'info');
+            return;
+        }
+        
         const now = Date.now();
         if (now - this.lastSaveTime < this.config.MIN_SAVE_INTERVAL) {
-            this.showNotification('لطفاً کمی صبر کنید و دوباره تلاش کنید', 'info');
+            this.showNotification('لطفاً کمی صبر کنید', 'info');
             return;
         }
         
@@ -171,6 +134,9 @@ class ALFAJRApp {
                 return;
             }
             
+            // بروزرسانی زمان
+            customer.updatedAt = new Date().toISOString();
+            
             // ذخیره در دیتابیس
             await this.db.saveCustomer(customer);
             
@@ -181,18 +147,21 @@ class ALFAJRApp {
             }
             
             this.lastSaveTime = Date.now();
-            this.showNotification('تغییرات با موفقیت ذخیره شد', 'success');
+            this.showNotification('تغییرات ذخیره شد', 'success');
             
         } catch (error) {
+            console.error('Save error:', error);
             this.showNotification(`خطا در ذخیره‌سازی: ${error.message}`, 'error');
-            throw error;
         } finally {
             this.isSaving = false;
         }
-    }
+    },
 
     async deleteCurrentCustomer() {
-        if (!this.currentCustomerId) return;
+        if (!this.currentCustomerId) {
+            this.showNotification('هیچ مشتری انتخاب نشده است', 'warning');
+            return;
+        }
         
         if (!confirm('آیا از حذف این مشتری مطمئن هستید؟ این عمل غیرقابل بازگشت است.')) {
             return;
@@ -208,22 +177,49 @@ class ALFAJRApp {
             // برگشت به صفحه اصلی
             this.backHome();
             
-            // رندر مجدد لیست
+            // رندر مجدد
             this.renderCustomerList();
             this.updateStats();
             
-            this.showNotification('مشتری با موفقیت حذف شد', 'success');
+            this.showNotification('مشتری حذف شد', 'success');
             
         } catch (error) {
-            this.showNotification(`خطا در حذف مشتری: ${error.message}`, 'error');
+            console.error('Delete error:', error);
+            this.showNotification(`خطا در حذف: ${error.message}`, 'error');
         }
-    }
+    },
+
+    deleteCustomer(customerId) {
+        if (!confirm('آیا از حذف این مشتری مطمئن هستید؟')) {
+            return;
+        }
+        
+        try {
+            // حذف از دیتابیس
+            this.db.deleteCustomer(customerId);
+            
+            // حذف از لیست
+            this.customers = this.customers.filter(c => c.id !== customerId);
+            
+            // رندر مجدد
+            this.renderCustomerList();
+            this.updateStats();
+            
+            this.showNotification('مشتری حذف شد', 'success');
+            
+        } catch (error) {
+            console.error('Delete error:', error);
+            this.showNotification(`خطا در حذف: ${error.message}`, 'error');
+        }
+    },
 
     getCurrentCustomer() {
         return this.customers.find(c => c.id === this.currentCustomerId);
-    }
+    },
 
     openCustomerProfile(customerId) {
+        console.log('Opening profile for:', customerId);
+        
         const customer = this.customers.find(c => c.id === customerId);
         if (!customer) {
             this.showNotification('مشتری پیدا نشد', 'error');
@@ -233,24 +229,30 @@ class ALFAJRApp {
         this.currentCustomerId = customerId;
         this.renderCustomerProfile(customer);
         
-        // تغییر صفحه
+        // نمایش صفحه پروفایل
         document.getElementById('homePage').style.display = 'none';
         document.getElementById('profilePage').style.display = 'block';
         
         // اسکرول به بالا
         window.scrollTo(0, 0);
-    }
+    },
 
     backHome() {
+        console.log('Going back home');
+        
         this.currentCustomerId = null;
         document.getElementById('profilePage').style.display = 'none';
         document.getElementById('homePage').style.display = 'block';
-    }
+        
+        // رندر مجدد لیست
+        this.renderCustomerList();
+    },
 
-    // ========== SEARCH FUNCTIONALITY ==========
-    async searchCustomers() {
+    // ========== SEARCH ==========
+    searchCustomers() {
         const searchInput = document.getElementById('searchInput');
         const query = searchInput.value.trim();
+        console.log('Searching for:', query);
         
         if (!query) {
             this.renderCustomerList();
@@ -260,26 +262,30 @@ class ALFAJRApp {
         const results = this.customers.filter(customer => 
             customer.name.toLowerCase().includes(query.toLowerCase()) ||
             (customer.phone && customer.phone.includes(query)) ||
-            (customer.id && customer.id.toLowerCase().includes(query.toLowerCase())) ||
-            (customer.notes && customer.notes.toLowerCase().includes(query.toLowerCase()))
+            (customer.id && customer.id.toLowerCase().includes(query.toLowerCase()))
         );
         
         this.renderCustomerList(results);
-    }
+    },
 
     // ========== RENDERING ==========
     renderCustomerList(customers = this.customers) {
         const container = document.getElementById('customerList');
-        if (!container) return;
+        if (!container) {
+            console.error('Customer list container not found');
+            return;
+        }
+        
+        console.log('Rendering', customers.length, 'customers');
         
         if (customers.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-users"></i>
-                    <h3>مشتری یافت نشد</h3>
-                    <p>هیچ مشتری مطابق با جستجوی شما پیدا نشد</p>
+                    <h3>${this.customers.length === 0 ? 'هنوز مشتری ثبت نشده است' : 'مشتری یافت نشد'}</h3>
+                    <p>${this.customers.length === 0 ? 'برای شروع، روی دکمه "مشتری جدید" کلیک کنید' : 'هیچ مشتری مطابق با جستجوی شما پیدا نشد'}</p>
                     <button class="btn-primary" onclick="App.addCustomer()" style="margin-top: 20px;">
-                        <i class="fas fa-user-plus"></i> افزودن مشتری جدید
+                        <i class="fas fa-user-plus"></i> ${this.customers.length === 0 ? 'افزودن اولین مشتری' : 'افزودن مشتری جدید'}
                     </button>
                 </div>
             `;
@@ -323,35 +329,74 @@ class ALFAJRApp {
                 </div>
             </div>
         `).join('');
-    }
+    },
 
     renderCustomerProfile(customer) {
-        // پر کردن اطلاعات اصلی
+        console.log('Rendering profile for:', customer.name);
+        
+        // اطلاعات اصلی
         document.getElementById('profileName').textContent = customer.name;
         document.getElementById('profilePhoneText').textContent = customer.phone || 'ثبت نشده';
         document.getElementById('profileId').textContent = `کد: ${customer.id}`;
         
         // توضیحات
-        document.getElementById('customerNotes').value = customer.notes || '';
+        const notesTextarea = document.getElementById('customerNotes');
+        if (notesTextarea) {
+            notesTextarea.value = customer.notes || '';
+            
+            // اضافه کردن event listener برای auto-save
+            notesTextarea.oninput = () => {
+                customer.notes = notesTextarea.value;
+                this.autoSaveCustomer(customer);
+            };
+        }
         
         // قیمت‌ها
-        document.getElementById('totalPrice').value = customer.totalPrice || '';
-        document.getElementById('paidAmount').value = customer.paidAmount || '';
-        document.getElementById('deliveryDate').value = customer.deliveryDate || '';
+        const totalPriceInput = document.getElementById('totalPrice');
+        const paidAmountInput = document.getElementById('paidAmount');
+        const deliveryDateInput = document.getElementById('deliveryDate');
+        
+        if (totalPriceInput) {
+            totalPriceInput.value = customer.totalPrice || '';
+            totalPriceInput.onchange = () => {
+                customer.totalPrice = totalPriceInput.value;
+                this.autoSaveCustomer(customer);
+            };
+        }
+        
+        if (paidAmountInput) {
+            paidAmountInput.value = customer.paidAmount || '';
+            paidAmountInput.onchange = () => {
+                customer.paidAmount = paidAmountInput.value;
+                this.autoSaveCustomer(customer);
+            };
+        }
+        
+        if (deliveryDateInput) {
+            deliveryDateInput.value = customer.deliveryDate || '';
+            deliveryDateInput.onchange = () => {
+                customer.deliveryDate = deliveryDateInput.value;
+                this.autoSaveCustomer(customer);
+            };
+        }
         
         // اندازه‌گیری‌ها
-        this.renderMeasurements(customer.measurements || []);
+        this.renderMeasurements(customer);
         
         // مدل‌ها
-        this.renderModels(customer.models || []);
+        this.renderModels(customer);
         
         // سفارشات
-        this.renderOrders(customer.orders || []);
-    }
+        this.renderOrders(customer);
+    },
 
-    renderMeasurements(measurements) {
+    renderMeasurements(customer) {
         const container = document.getElementById('measurementsGrid');
         if (!container) return;
+        
+        if (!customer.measurements) {
+            customer.measurements = [];
+        }
         
         const defaultMeasurements = [
             { label: 'قد', value: '', note: '' },
@@ -362,8 +407,9 @@ class ALFAJRApp {
             { label: 'دور بازو', value: '', note: '' }
         ];
         
+        // ادغام اندازه‌گیری‌های پیش‌فرض با اندازه‌گیری‌های موجود
         const allMeasurements = [...defaultMeasurements];
-        measurements.forEach(meas => {
+        customer.measurements.forEach(meas => {
             const existing = allMeasurements.find(m => m.label === meas.label);
             if (existing) {
                 existing.value = meas.value;
@@ -373,43 +419,109 @@ class ALFAJRApp {
             }
         });
         
-        container.innerHTML = allMeasurements.map((meas, index) => `
-            <div class="measurement-item">
-                <label>${meas.label}</label>
-                <input type="text" 
-                       value="${Utils.escapeHtml(meas.value)}" 
-                       placeholder="سانتیمتر"
-                       onchange="App.updateMeasurement(${index}, this.value)"
-                       data-measurement-index="${index}">
-                <input type="text" 
-                       value="${Utils.escapeHtml(meas.note || '')}" 
-                       placeholder="توضیح"
-                       onchange="App.updateMeasurementNote(${index}, this.value)"
-                       class="measurement-note">
-            </div>
-        `).join('');
-    }
+        container.innerHTML = allMeasurements.map((meas, index) => {
+            // پیدا کردن index واقعی در measurements مشتری
+            const realIndex = customer.measurements.findIndex(m => m.label === meas.label);
+            const finalIndex = realIndex !== -1 ? realIndex : index;
+            
+            return `
+                <div class="measurement-item">
+                    <label>${meas.label}</label>
+                    <input type="text" 
+                           value="${Utils.escapeHtml(meas.value)}" 
+                           placeholder="سانتیمتر"
+                           data-label="${meas.label}"
+                           onchange="App.updateMeasurement('${customer.id}', '${meas.label}', this.value)">
+                    <input type="text" 
+                           value="${Utils.escapeHtml(meas.note || '')}" 
+                           placeholder="توضیح"
+                           data-label="${meas.label}"
+                           onchange="App.updateMeasurementNote('${customer.id}', '${meas.label}', this.value)"
+                           class="measurement-note">
+                </div>
+            `;
+        }).join('');
+    },
 
-    renderModels(models) {
+    updateMeasurement(customerId, label, value) {
+        const customer = this.customers.find(c => c.id === customerId);
+        if (!customer) return;
+        
+        if (!customer.measurements) {
+            customer.measurements = [];
+        }
+        
+        let measurement = customer.measurements.find(m => m.label === label);
+        if (!measurement) {
+            measurement = { label, value: '', note: '' };
+            customer.measurements.push(measurement);
+        }
+        
+        measurement.value = value;
+        this.autoSaveCustomer(customer);
+    },
+
+    updateMeasurementNote(customerId, label, note) {
+        const customer = this.customers.find(c => c.id === customerId);
+        if (!customer || !customer.measurements) return;
+        
+        let measurement = customer.measurements.find(m => m.label === label);
+        if (!measurement) {
+            measurement = { label, value: '', note: '' };
+            customer.measurements.push(measurement);
+        }
+        
+        measurement.note = note;
+        this.autoSaveCustomer(customer);
+    },
+
+    renderModels(customer) {
         const container = document.getElementById('modelsGrid');
         if (!container) return;
+        
+        if (!customer.models) {
+            customer.models = [];
+        }
         
         const allModels = ['کت', 'شلوار', 'پیراهن', 'دامن', 'پالتو', 'بارانی', 'لباس مجلسی'];
         
         container.innerHTML = allModels.map(model => `
-            <div class="model-item ${models.includes(model) ? 'selected' : ''}" 
-                 onclick="App.toggleModel('${model}')">
+            <div class="model-item ${customer.models.includes(model) ? 'selected' : ''}" 
+                 onclick="App.toggleModel('${customer.id}', '${model}')">
                 <i class="fas fa-tshirt"></i>
                 <span>${model}</span>
             </div>
         `).join('');
-    }
+    },
 
-    renderOrders(orders) {
+    toggleModel(customerId, modelName) {
+        const customer = this.customers.find(c => c.id === customerId);
+        if (!customer) return;
+        
+        if (!customer.models) {
+            customer.models = [];
+        }
+        
+        const index = customer.models.indexOf(modelName);
+        if (index === -1) {
+            customer.models.push(modelName);
+        } else {
+            customer.models.splice(index, 1);
+        }
+        
+        this.renderModels(customer);
+        this.autoSaveCustomer(customer);
+    },
+
+    renderOrders(customer) {
         const container = document.getElementById('ordersList');
         if (!container) return;
         
-        if (orders.length === 0) {
+        if (!customer.orders) {
+            customer.orders = [];
+        }
+        
+        if (customer.orders.length === 0) {
             container.innerHTML = `
                 <div class="empty-state-small">
                     <i class="fas fa-clipboard-list"></i>
@@ -419,11 +531,11 @@ class ALFAJRApp {
             return;
         }
         
-        container.innerHTML = orders.map((order, index) => `
+        container.innerHTML = customer.orders.map((order, index) => `
             <div class="order-item">
                 <div class="order-header">
                     <span class="order-type">${Utils.escapeHtml(order.type)}</span>
-                    <button class="btn-small btn-danger" onclick="App.deleteOrder(${index})">
+                    <button class="btn-small btn-danger" onclick="App.deleteOrder('${customer.id}', ${index})">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -439,60 +551,14 @@ class ALFAJRApp {
                 ` : ''}
             </div>
         `).join('');
-    }
-
-    // ========== EVENT HANDLERS ==========
-    updateMeasurement(index, value) {
-        const customer = this.getCurrentCustomer();
-        if (!customer) return;
-        
-        if (!customer.measurements) {
-            customer.measurements = [];
-        }
-        
-        // پیدا کردن اندازه‌گیری یا ایجاد جدید
-        let measurement = customer.measurements[index];
-        if (!measurement) {
-            const labels = ['قد', 'دور سینه', 'دور کمر', 'دور باسن', 'قد آستین', 'دور بازو'];
-            measurement = {
-                label: labels[index] || `اندازه ${index + 1}`,
-                value: '',
-                note: ''
-            };
-            customer.measurements[index] = measurement;
-        }
-        
-        measurement.value = value;
-    }
-
-    updateMeasurementNote(index, note) {
-        const customer = this.getCurrentCustomer();
-        if (!customer || !customer.measurements) return;
-        
-        if (customer.measurements[index]) {
-            customer.measurements[index].note = note;
-        }
-    }
-
-    toggleModel(modelName) {
-        const customer = this.getCurrentCustomer();
-        if (!customer) return;
-        
-        if (!customer.models) {
-            customer.models = [];
-        }
-        
-        const index = customer.models.indexOf(modelName);
-        if (index === -1) {
-            customer.models.push(modelName);
-        } else {
-            customer.models.splice(index, 1);
-        }
-        
-        this.renderModels(customer.models);
-    }
+    },
 
     addOrder() {
+        if (!this.currentCustomerId) {
+            this.showNotification('ابتدا یک مشتری انتخاب کنید', 'warning');
+            return;
+        }
+        
         const type = prompt('نوع سفارش را وارد کنید (مثال: کت شلوار):');
         if (!type) return;
         
@@ -512,20 +578,33 @@ class ALFAJRApp {
         };
         
         customer.orders.push(order);
-        this.renderOrders(customer.orders);
-    }
+        this.renderOrders(customer);
+        this.autoSaveCustomer(customer);
+    },
 
-    deleteOrder(index) {
-        const customer = this.getCurrentCustomer();
+    deleteOrder(customerId, index) {
+        const customer = this.customers.find(c => c.id === customerId);
         if (!customer || !customer.orders) return;
         
         if (confirm('آیا از حذف این سفارش مطمئن هستید؟')) {
             customer.orders.splice(index, 1);
-            this.renderOrders(customer.orders);
+            this.renderOrders(customer);
+            this.autoSaveCustomer(customer);
         }
-    }
+    },
 
-    // ========== STATS & UTILITIES ==========
+    // ========== UTILITIES ==========
+    autoSaveCustomer(customer) {
+        // Debounced auto-save
+        if (this.autoSaveTimer) {
+            clearTimeout(this.autoSaveTimer);
+        }
+        
+        this.autoSaveTimer = setTimeout(() => {
+            this.saveCurrentCustomer();
+        }, 2000);
+    },
+
     updateStats() {
         const total = this.customers.length;
         const paid = this.customers.filter(c => {
@@ -541,9 +620,8 @@ class ALFAJRApp {
         document.getElementById('totalCustomers').textContent = total;
         document.getElementById('paidCustomers').textContent = paid;
         document.getElementById('activeOrders').textContent = activeOrders;
-    }
+    },
 
-    // ========== THEME MANAGEMENT ==========
     setTheme(theme) {
         this.currentTheme = theme;
         document.body.className = `${theme}-mode`;
@@ -551,275 +629,26 @@ class ALFAJRApp {
         if (this.db) {
             this.db.saveSetting('theme', theme);
         }
-    }
+    },
 
     toggleSettings() {
         const dropdown = document.getElementById('settingsDropdown');
         dropdown.classList.toggle('show');
-    }
+    },
 
-    // ========== IMPORT/EXPORT ==========
-    async exportData() {
-        try {
-            const data = {
-                customers: this.customers,
-                exportedAt: new Date().toISOString(),
-                version: '1.0.0',
-                count: this.customers.length
-            };
-            
-            const dataStr = JSON.stringify(data, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-            
-            const exportFileDefaultName = `alfajr_backup_${new Date().toISOString().slice(0, 10)}.json`;
-            
-            const linkElement = document.createElement('a');
-            linkElement.setAttribute('href', dataUri);
-            linkElement.setAttribute('download', exportFileDefaultName);
-            linkElement.click();
-            
-            this.showNotification('پشتیبان با موفقیت ذخیره شد', 'success');
-            
-        } catch (error) {
-            this.showNotification(`خطا در ذخیره پشتیبان: ${error.message}`, 'error');
-        }
-    }
-
-    triggerFileImport() {
-        document.getElementById('fileInput').click();
-    }
-
-    async importData(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        if (!confirm('آیا از وارد کردن این پشتیبان مطمئن هستید؟ داده‌های فعلی با داده‌های پشتیبان جایگزین می‌شوند.')) {
-            return;
-        }
-        
-        try {
-            this.showLoading('در حال وارد کردن داده‌ها...');
-            
-            const text = await file.text();
-            const data = JSON.parse(text);
-            
-            // اعتبارسنجی داده‌ها
-            if (!data.customers || !Array.isArray(data.customers)) {
-                throw new Error('فایل پشتیبان معتبر نیست');
-            }
-            
-            // پاک کردن داده‌های فعلی
-            await this.db.clearAllData();
-            
-            // وارد کردن مشتریان جدید
-            for (const customer of data.customers) {
-                await this.db.saveCustomer(customer);
-            }
-            
-            // بارگذاری مجدد داده‌ها
-            await this.loadAllData();
-            
-            this.showNotification(`تعداد ${data.customers.length} مشتری با موفقیت وارد شدند`, 'success');
-            
-        } catch (error) {
-            this.showNotification(`خطا در وارد کردن داده‌ها: ${error.message}`, 'error');
-        } finally {
-            this.hideLoading();
-            // ریست کردن input file
-            event.target.value = '';
-        }
-    }
-
-    async clearAllData() {
-        if (!confirm('⚠️ هشدار! آیا مطمئن هستید می‌خواهید تمام داده‌ها را پاک کنید؟ این عمل غیرقابل بازگشت است.')) {
-            return;
-        }
-        
-        if (!confirm('❌ تأیید نهایی: تمام مشتریان، سفارشات و تاریخچه حذف خواهند شد. ادامه می‌دهید؟')) {
-            return;
-        }
-        
-        try {
-            this.showLoading('در حال پاک‌سازی داده‌ها...');
-            
-            await this.db.clearAllData();
-            
-            this.customers = [];
-            this.currentCustomerId = null;
-            
-            this.renderCustomerList();
-            this.updateStats();
-            
-            this.showNotification('تمامی داده‌ها با موفقیت پاک شدند', 'success');
-            
-        } catch (error) {
-            this.showNotification(`خطا در پاک‌سازی داده‌ها: ${error.message}`, 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
-
-    // ========== PRINT FUNCTIONS ==========
-    printMeasurementLabel() {
-        if (!this.currentCustomerId) {
-            this.showNotification('ابتدا یک مشتری انتخاب کنید', 'warning');
-            return;
-        }
-        
-        const customer = this.getCurrentCustomer();
-        if (!customer) return;
-        
-        // ذخیره قبل از چاپ
-        this.saveCurrentCustomer();
-        
-        // استفاده از تابع چاپ
-        PrintManager.printMeasurementLabel(customer);
-    }
-
-    printInvoice() {
-        if (!this.currentCustomerId) {
-            this.showNotification('ابتدا یک مشتری انتخاب کنید', 'warning');
-            return;
-        }
-        
-        const customer = this.getCurrentCustomer();
-        if (!customer) return;
-        
-        // ذخیره قبل از چاپ
-        this.saveCurrentCustomer();
-        
-        // استفاده از تابع چاپ
-        PrintManager.printInvoice(customer);
-    }
-
-    // ========== SETUP FUNCTIONS ==========
-    setupComponents() {
-        // تنظیم event listener برای input فایل
-        document.getElementById('fileInput').addEventListener('change', (e) => this.importData(e));
-        
-        // تنظیم جستجوی debounced
-        const searchInput = document.getElementById('searchInput');
-        const debouncedSearch = Utils.debounce(() => this.searchCustomers(), this.config.DEBOUNCE_SEARCH);
-        searchInput.addEventListener('input', debouncedSearch);
-        searchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.searchCustomers();
-        });
-    }
-
-    setupEventListeners() {
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
-        
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
-            const dropdown = document.getElementById('settingsDropdown');
-            const settingsBtn = document.querySelector('.settings-btn');
-            
-            if (dropdown && dropdown.classList.contains('show') && 
-                !dropdown.contains(e.target) && 
-                !settingsBtn.contains(e.target)) {
-                dropdown.classList.remove('show');
-            }
-        });
-        
-        // Auto-save on form changes
-        const autoSaveElements = document.querySelectorAll('#customerNotes, #totalPrice, #paidAmount, #deliveryDate');
-        autoSaveElements.forEach(el => {
-            el.addEventListener('change', () => {
-                if (this.currentCustomerId) {
-                    this.saveCurrentCustomer();
-                }
-            });
-        });
-    }
-
-    handleKeyboardShortcuts(e) {
-        // Ctrl/Cmd + S to save
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-            e.preventDefault();
-            if (this.currentCustomerId) {
-                this.saveCurrentCustomer();
-            }
-        }
-        
-        // Escape to go back
-        if (e.key === 'Escape') {
-            const profilePage = document.getElementById('profilePage');
-            if (profilePage && profilePage.style.display !== 'none') {
-                this.backHome();
-            }
-        }
-        
-        // Ctrl/Cmd + F to focus search
-        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-            e.preventDefault();
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) {
-                searchInput.focus();
-                searchInput.select();
-            }
-        }
-        
-        // Ctrl/Cmd + N for new customer
-        if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-            e.preventDefault();
-            this.addCustomer();
-        }
-    }
-
-    initializeServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('service-worker.js')
-                .then(registration => {
-                    console.log('Service Worker registered');
-                    
-                    // Check for updates
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing;
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                this.showNotification('بروزرسانی جدید آماده است! صفحه را رفرش کنید.', 'info');
-                            }
-                        });
-                    });
-                })
-                .catch(error => {
-                    console.error('Service Worker registration failed:', error);
-                });
-        }
-    }
-
-    startAutoSave() {
-        setInterval(() => {
-            if (this.currentCustomerId && !this.isSaving) {
-                this.saveCurrentCustomer();
-            }
-        }, this.config.AUTO_SAVE_DELAY);
-    }
-
-    optimizeDatabase() {
-        if (confirm('آیا از بهینه‌سازی دیتابیس مطمئن هستید؟')) {
-            this.showLoading('در حال بهینه‌سازی...');
-            setTimeout(() => {
-                this.hideLoading();
-                this.showNotification('دیتابیس با موفقیت بهینه‌سازی شد', 'success');
-            }, 2000);
-        }
-    }
-
-    // ========== UI UTILITIES ==========
+    // ========== UI HELPERS ==========
     showLoading(message = 'در حال بارگذاری...') {
         const overlay = document.getElementById('loadingOverlay');
         const text = document.getElementById('loadingText');
         
         if (overlay) overlay.style.display = 'flex';
         if (text && message) text.textContent = message;
-    }
+    },
 
     hideLoading() {
         const overlay = document.getElementById('loadingOverlay');
         if (overlay) overlay.style.display = 'none';
-    }
+    },
 
     showNotification(message, type = 'info') {
         const container = document.getElementById('globalNotification');
@@ -839,13 +668,12 @@ class ALFAJRApp {
         
         container.appendChild(notification);
         
-        // حذف خودکار بعد از 5 ثانیه
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.remove();
             }
         }, 5000);
-    }
+    },
 
     showErrorState(error) {
         const listElement = document.getElementById('customerList');
@@ -855,31 +683,160 @@ class ALFAJRApp {
                     <i class="fas fa-exclamation-triangle"></i>
                     <h3>خطا در راه‌اندازی سیستم</h3>
                     <p>${Utils.escapeHtml(error.message)}</p>
-                    <p>لطفاً صفحه را رفرش کنید یا از مرورگر دیگری استفاده نمایید.</p>
+                    <p>لطفاً صفحه را رفرش کنید</p>
                     <button class="btn-primary" onclick="location.reload()" style="margin-top: 20px;">
                         <i class="fas fa-redo"></i> رفرش صفحه
                     </button>
                 </div>
             `;
         }
-    }
-}
+    },
 
-// ========== GLOBAL APP INSTANCE ==========
-const App = new ALFAJRApp();
+    // ========== SETUP ==========
+    setupEventListeners() {
+        console.log('Setting up event listeners...');
+        
+        // جستجو با Enter
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.searchCustomers();
+                }
+            });
+        }
+        
+        // فایل input
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => this.importData(e));
+        }
+        
+        // بستن dropdown با کلیک خارج
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('settingsDropdown');
+            const settingsBtn = document.querySelector('.settings-btn');
+            
+            if (dropdown && dropdown.classList.contains('show') && 
+                !dropdown.contains(e.target) && 
+                settingsBtn && !settingsBtn.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+S برای ذخیره
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                this.saveCurrentCustomer();
+            }
+            
+            // Escape برای برگشت
+            if (e.key === 'Escape') {
+                const profilePage = document.getElementById('profilePage');
+                if (profilePage && profilePage.style.display !== 'none') {
+                    this.backHome();
+                }
+            }
+        });
+        
+        console.log('Event listeners setup complete');
+    }
+};
+
+// ========== GLOBAL FUNCTIONS ==========
+// این توابع global هستن و از HTML فراخوانی میشن
+window.addCustomer = () => App.addCustomer();
+window.searchCustomer = () => App.searchCustomers();
+window.openProfile = (id) => App.openCustomerProfile(id);
+window.backHome = () => App.backHome();
+window.saveCustomer = () => App.saveCurrentCustomer();
+window.deleteCustomer = (id) => App.deleteCustomer(id);
+window.deleteCurrentCustomer = () => App.deleteCurrentCustomer();
+window.updateNotes = (id, notes) => {
+    const customer = App.customers.find(c => c.id === id);
+    if (customer) {
+        customer.notes = notes;
+        App.autoSaveCustomer(customer);
+    }
+};
+window.updateMeasurement = (customerId, label, value) => App.updateMeasurement(customerId, label, value);
+window.updateMeasurementNote = (customerId, label, note) => App.updateMeasurementNote(customerId, label, note);
+window.toggleModel = (customerId, model) => App.toggleModel(customerId, model);
+window.addOrder = () => App.addOrder();
+window.deleteOrder = (customerId, index) => App.deleteOrder(customerId, index);
+window.printFullTable = () => PrintManager.printMeasurementLabel(App.getCurrentCustomer());
+window.printProfessionalInvoice = () => PrintManager.printInvoice(App.getCurrentCustomer());
+window.toggleDarkMode = () => App.setTheme('dark');
+window.toggleLightMode = () => App.setTheme('light');
+window.toggleVividMode = () => App.setTheme('vivid');
+window.toggleSettings = () => App.toggleSettings();
+window.optimizeDatabase = () => {
+    App.showNotification('دیتابیس در حال بهینه‌سازی...', 'info');
+    setTimeout(() => {
+        App.showNotification('دیتابیس بهینه‌سازی شد', 'success');
+    }, 1000);
+};
+window.clearAllData = () => {
+    if (confirm('⚠️ آیا مطمئن هستید؟ تمام داده‌ها حذف خواهند شد!')) {
+        App.db.clearAllData();
+        App.customers = [];
+        App.currentCustomerId = null;
+        App.renderCustomerList();
+        App.updateStats();
+        App.showNotification('همه داده‌ها پاک شدند', 'success');
+    }
+};
+window.saveDataToFile = () => {
+    const data = {
+        customers: App.customers,
+        exportedAt: new Date().toISOString(),
+        version: '1.0'
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `alfajr-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    App.showNotification('پشتیبان ذخیره شد', 'success');
+};
+window.loadDataFromFile = () => {
+    document.getElementById('fileInput').click();
+};
+window.importData = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.customers && Array.isArray(data.customers)) {
+                App.customers = data.customers;
+                App.renderCustomerList();
+                App.updateStats();
+                App.showNotification(`تعداد ${data.customers.length} مشتری وارد شد`, 'success');
+            }
+        } catch (error) {
+            App.showNotification('فایل پشتیبان معتبر نیست', 'error');
+        }
+    };
+    reader.readAsText(file);
+};
 
 // ========== START APP ==========
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, starting app...');
     App.initialize();
 });
 
-// Global error handler
+// Global error handling
 window.addEventListener('error', (event) => {
     console.error('Global error:', event.error);
-    App.showNotification(`خطای سیستمی: ${event.message}`, 'error');
-});
-
-window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason);
-    App.showNotification(`خطای پردازش: ${event.reason.message || 'خطای ناشناخته'}`, 'error');
+    App.showNotification(`خطا: ${event.message}`, 'error');
 });
