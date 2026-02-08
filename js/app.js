@@ -141,7 +141,7 @@ const App = {
             // ذخیره در دیتابیس
             await this.db.saveCustomer(customer);
             
-            // بروزرسانی در لی��ت
+            // بروزرسانی در لیست
             const index = this.customers.findIndex(c => c.id === customer.id);
             if (index !== -1) {
                 this.customers[index] = { ...customer };
