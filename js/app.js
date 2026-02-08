@@ -9,10 +9,11 @@ const App = {
     isSaving: false,
     lastSaveTime: 0,
     isInitialized: false,
+    autoSaveTimer: null,
     
     config: {
         MIN_SAVE_INTERVAL: 1500,
-        AUTO_SAVE_DELAY: 30000,
+        AUTO_SAVE_DELAY: 2000,
         DEBOUNCE_SEARCH: 500,
         MAX_CUSTOMERS: 1000
     },
@@ -77,7 +78,7 @@ const App = {
             // اعتبارسنجی
             const isValid = Validator.validateCustomer(newCustomer);
             if (!isValid.isValid) {
-                this.showNotification(isValid.errors[0], 'warning');
+                this.showNotification('لطفاً نام مشتری را وارد کنید', 'warning');
                 return;
             }
             
@@ -140,7 +141,7 @@ const App = {
             // ذخیره در دیتابیس
             await this.db.saveCustomer(customer);
             
-            // بروزرسانی در لیست
+            // بروزرسانی در لی��ت
             const index = this.customers.findIndex(c => c.id === customer.id);
             if (index !== -1) {
                 this.customers[index] = { ...customer };
@@ -189,14 +190,14 @@ const App = {
         }
     },
 
-    deleteCustomer(customerId) {
+    async deleteCustomer(customerId) {
         if (!confirm('آیا از حذف این مشتری مطمئن هستید؟')) {
             return;
         }
         
         try {
             // حذف از دیتابیس
-            this.db.deleteCustomer(customerId);
+            await this.db.deleteCustomer(customerId);
             
             // حذف از لیست
             this.customers = this.customers.filter(c => c.id !== customerId);
@@ -419,11 +420,7 @@ const App = {
             }
         });
         
-        container.innerHTML = allMeasurements.map((meas, index) => {
-            // پیدا کردن index واقعی در measurements مشتری
-            const realIndex = customer.measurements.findIndex(m => m.label === meas.label);
-            const finalIndex = realIndex !== -1 ? realIndex : index;
-            
+        container.innerHTML = allMeasurements.map((meas) => {
             return `
                 <div class="measurement-item">
                     <label>${meas.label}</label>
@@ -593,6 +590,69 @@ const App = {
         }
     },
 
+    // ========== PRINT METHODS ==========
+    printMeasurementLabel() {
+        const customer = this.getCurrentCustomer();
+        PrintManager.printMeasurementLabel(customer);
+    },
+
+    printInvoice() {
+        const customer = this.getCurrentCustomer();
+        PrintManager.printInvoice(customer);
+    },
+
+    // ========== EXPORT/IMPORT ==========
+    saveDataToFile() {
+        const data = {
+            customers: this.customers,
+            exportedAt: new Date().toISOString(),
+            version: '1.0'
+        };
+        
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `alfajr-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        this.showNotification('پشتیبان ذخیره شد', 'success');
+    },
+
+    loadDataFromFile() {
+        document.getElementById('fileInput').click();
+    },
+
+    importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.customers && Array.isArray(data.customers)) {
+                    this.customers = data.customers;
+                    this.renderCustomerList();
+                    this.updateStats();
+                    this.showNotification(`تعداد ${data.customers.length} مشتری وارد شد`, 'success');
+                    
+                    // ذخیره در دیتابیس
+                    data.customers.forEach(customer => {
+                        this.db.saveCustomer(customer);
+                    });
+                }
+            } catch (error) {
+                this.showNotification('فایل پشتیبان معتبر نیست', 'error');
+            }
+        };
+        reader.readAsText(file);
+        
+        // ریست کردن input
+        event.target.value = '';
+    },
+
     // ========== UTILITIES ==========
     autoSaveCustomer(customer) {
         // Debounced auto-save
@@ -600,9 +660,14 @@ const App = {
             clearTimeout(this.autoSaveTimer);
         }
         
-        this.autoSaveTimer = setTimeout(() => {
-            this.saveCurrentCustomer();
-        }, 2000);
+        this.autoSaveTimer = setTimeout(async () => {
+            try {
+                await this.db.saveCustomer(customer);
+                console.log('Customer auto-saved:', customer.id);
+            } catch (error) {
+                console.error('Auto-save error:', error);
+            }
+        }, this.config.AUTO_SAVE_DELAY);
     },
 
     updateStats() {
@@ -692,6 +757,31 @@ const App = {
         }
     },
 
+    async optimizeDatabase() {
+        this.showNotification('دیتابیس در حال بهینه‌سازی...', 'info');
+        try {
+            await this.db.optimize();
+            this.showNotification('دیتابیس بهینه‌سازی شد', 'success');
+        } catch (error) {
+            this.showNotification('خطا در بهینه‌سازی دیتابیس', 'error');
+        }
+    },
+
+    async clearAllData() {
+        if (confirm('⚠️ آیا مطمئن هستید؟ تمام داده‌ها حذف خواهند شد!')) {
+            try {
+                await this.db.clearAllData();
+                this.customers = [];
+                this.currentCustomerId = null;
+                this.renderCustomerList();
+                this.updateStats();
+                this.showNotification('همه داده‌ها پاک شدند', 'success');
+            } catch (error) {
+                this.showNotification('خطا در پاک‌سازی داده‌ها', 'error');
+            }
+        }
+    },
+
     // ========== SETUP ==========
     setupEventListeners() {
         console.log('Setting up event listeners...');
@@ -704,6 +794,11 @@ const App = {
                     this.searchCustomers();
                 }
             });
+            
+            // Debounced search on input
+            searchInput.addEventListener('input', Utils.debounce(() => {
+                this.searchCustomers();
+            }, this.config.DEBOUNCE_SEARCH));
         }
         
         // فایل input
@@ -754,80 +849,21 @@ window.backHome = () => App.backHome();
 window.saveCustomer = () => App.saveCurrentCustomer();
 window.deleteCustomer = (id) => App.deleteCustomer(id);
 window.deleteCurrentCustomer = () => App.deleteCurrentCustomer();
-window.updateNotes = (id, notes) => {
-    const customer = App.customers.find(c => c.id === id);
-    if (customer) {
-        customer.notes = notes;
-        App.autoSaveCustomer(customer);
-    }
-};
 window.updateMeasurement = (customerId, label, value) => App.updateMeasurement(customerId, label, value);
 window.updateMeasurementNote = (customerId, label, note) => App.updateMeasurementNote(customerId, label, note);
 window.toggleModel = (customerId, model) => App.toggleModel(customerId, model);
 window.addOrder = () => App.addOrder();
 window.deleteOrder = (customerId, index) => App.deleteOrder(customerId, index);
-window.printFullTable = () => PrintManager.printMeasurementLabel(App.getCurrentCustomer());
-window.printProfessionalInvoice = () => PrintManager.printInvoice(App.getCurrentCustomer());
+window.printMeasurementLabel = () => App.printMeasurementLabel();
+window.printInvoice = () => App.printInvoice();
 window.toggleDarkMode = () => App.setTheme('dark');
 window.toggleLightMode = () => App.setTheme('light');
 window.toggleVividMode = () => App.setTheme('vivid');
 window.toggleSettings = () => App.toggleSettings();
-window.optimizeDatabase = () => {
-    App.showNotification('دیتابیس در حال بهینه‌سازی...', 'info');
-    setTimeout(() => {
-        App.showNotification('دیتابیس بهینه‌سازی شد', 'success');
-    }, 1000);
-};
-window.clearAllData = () => {
-    if (confirm('⚠️ آیا مطمئن هستید؟ تمام داده‌ها حذف خواهند شد!')) {
-        App.db.clearAllData();
-        App.customers = [];
-        App.currentCustomerId = null;
-        App.renderCustomerList();
-        App.updateStats();
-        App.showNotification('همه داده‌ها پاک شدند', 'success');
-    }
-};
-window.saveDataToFile = () => {
-    const data = {
-        customers: App.customers,
-        exportedAt: new Date().toISOString(),
-        version: '1.0'
-    };
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `alfajr-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    App.showNotification('پشتیبان ذخیره شد', 'success');
-};
-window.loadDataFromFile = () => {
-    document.getElementById('fileInput').click();
-};
-window.importData = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const data = JSON.parse(e.target.result);
-            if (data.customers && Array.isArray(data.customers)) {
-                App.customers = data.customers;
-                App.renderCustomerList();
-                App.updateStats();
-                App.showNotification(`تعداد ${data.customers.length} مشتری وارد شد`, 'success');
-            }
-        } catch (error) {
-            App.showNotification('فایل پشتیبان معتبر نیست', 'error');
-        }
-    };
-    reader.readAsText(file);
-};
+window.saveDataToFile = () => App.saveDataToFile();
+window.loadDataFromFile = () => App.loadDataFromFile();
+window.optimizeDatabase = () => App.optimizeDatabase();
+window.clearAllData = () => App.clearAllData();
 
 // ========== START APP ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -838,5 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Global error handling
 window.addEventListener('error', (event) => {
     console.error('Global error:', event.error);
-    App.showNotification(`خطا: ${event.message}`, 'error');
+    if (App.isInitialized) {
+        App.showNotification(`خطا: ${event.message}`, 'error');
+    }
 });
