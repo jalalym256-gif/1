@@ -1,20 +1,20 @@
 const CACHE_NAME = 'alfajr-v5.0';
 const urlsToCache = [
-  index.html',
-  manifest.json',
-  assets/icon-192.png',
-  assets/icon-512.png',
-  https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  css/main.css',
-  css/theme.css',
-  css/responsive.css',
-  js/config.js',
-  js/customer.js',
-  js/database.js',
-  js/ui.js',
-  js/print.js',
-  js/theme.js',
-  js/main.js'
+  'index.html',
+  'manifest.json',
+  'assets/icon-192.png',
+  'assets/icon-512.png',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'css/main.css',
+  'css/theme.css',
+  'css/responsive.css',
+  'js/config.js',
+  'js/customer.js',
+  'js/database.js',
+  'js/ui.js',
+  'js/print.js',
+  'js/theme.js',
+  'js/main.js'
 ];
 
 // نصب Service Worker
