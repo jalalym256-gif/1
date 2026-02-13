@@ -464,4 +464,275 @@ function saveCustomer() {
     } catch (error) {
         showNotification('خطا در ذخیره', 'error');
     }
+}// ========== MISSING UI FUNCTIONS (ADD TO END OF ui.js) ==========
+
+function renderMeasurements() {
+    const container = document.getElementById('measurementsContainer');
+    if (!container || currentCustomerIndex === null) return;
+
+    const customer = customers[currentCustomerIndex];
+    let html = '<div class="section-header"><h3><i class="fas fa-ruler-combined"></i> اندازه‌گیری</h3></div><div class="measurements-grid">';
+
+    // تعریف گروه‌بندی‌ها برای نمایش منظم‌تر
+    const groups = {
+        'بالاتنه': ['قد', 'شانه_یک', 'شانه_دو', 'گردن', 'دور_سینه', 'بغل'],
+        'آستین': ['آستین_یک', 'آستین_دو', 'آستین_سه'],
+        'پایین‌تنه': ['دامن', 'شلوار', 'دم_پاچه', 'بر_تمبان', 'خشتک', 'چاک_پتی'],
+        'سایر': ['تعداد_سفارش', 'مقدار_تکه']
+    };
+
+    // رندر کردن فیلدها بر اساس گروه
+    for (const [groupName, fields] of Object.entries(groups)) {
+        html += `<div class="measurement-group"><h4>${groupName}</h4><div class="measurement-fields">`;
+        
+        fields.forEach(field => {
+            if (AppConfig.MEASUREMENT_FIELDS.includes(field)) {
+                const value = customer.measurements[field] !== undefined ? customer.measurements[field] : '';
+                const label = field.replace(/_/g, ' ');
+                
+                html += `
+                    <div class="measurement-field">
+                        <label>${label}</label>
+                        <input type="number" 
+                               class="measurement-input" 
+                               data-field="${field}" 
+                               value="${value}" 
+                               onchange="updateMeasurement(this)"
+                               onkeydown="handleMeasurementKeydown(event, this)">
+                    </div>
+                `;
+            }
+        });
+        
+        html += `</div></div>`;
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
 }
+
+function updateMeasurement(input) {
+    if (currentCustomerIndex === null) return;
+    const field = input.dataset.field;
+    const value = input.value;
+    customers[currentCustomerIndex].measurements[field] = value;
+    saveCustomer(); // ذخیره خودکار
+}
+
+function handleMeasurementKeydown(event, input) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        const inputs = document.querySelectorAll('.measurement-input');
+        const index = Array.from(inputs).indexOf(input);
+        if (index > -1 && index < inputs.length - 1) {
+            inputs[index + 1].focus();
+        }
+    }
+}
+
+function renderModels() {
+    const container = document.getElementById('modelsContainer');
+    if (!container || currentCustomerIndex === null) return;
+
+    const customer = customers[currentCustomerIndex];
+    
+    // اضافه کردن مدل دکمه به کانفیگ اگر وجود ندارد
+    if (!AppConfig.BUTTON_MODELS) {
+        AppConfig.BUTTON_MODELS = ["دکمه ضخیم", "دکمه فلزی", "دکمه ریلی", "دکمه ساده", "دکمه قاب‌دار"];
+    }
+
+    const modelCategories = [
+        { id: 'yakhun', title: 'مدل یخن', options: AppConfig.YAKHUN_MODELS, multi: false },
+        { id: 'sleeve', title: 'مدل آستین', options: AppConfig.SLEEVE_MODELS, multi: false },
+        { id: 'button', title: 'مدل دکمه', options: AppConfig.BUTTON_MODELS, multi: false }, // اضافه شده طبق درخواست
+        { id: 'skirt', title: 'مدل دامن', options: AppConfig.SKIRT_MODELS, multi: true },
+        { id: 'features', title: 'ویژگی‌ها', options: AppConfig.FEATURES_LIST, multi: true }
+    ];
+
+    let html = '<div class="section-header"><h3><i class="fas fa-tshirt"></i> مدل‌ها</h3></div><div class="models-grid">';
+
+    modelCategories.forEach(cat => {
+        html += `<div class="model-category"><h4>${cat.title}</h4><div class="model-options">`;
+        
+        cat.options.forEach(option => {
+            let isSelected = false;
+            if (cat.multi) {
+                // چک کردن آرایه برای دامن و ویژگی‌ها
+                isSelected = customer.models[cat.id] && customer.models[cat.id].includes(option);
+            } else {
+                // چک کردن رشته ساده برای یخن و آستین و دکمه
+                isSelected = customer.models[cat.id] === option;
+            }
+            
+            const clickHandler = cat.multi ? 
+                `toggleMultiSelect('${cat.id}', '${option}')` : 
+                `selectModel('${cat.id}', '${option}')`;
+                
+            html += `
+                <div class="model-option ${isSelected ? 'selected' : ''} ${cat.multi ? 'multi-select' : ''}" 
+                     onclick="${clickHandler}">
+                    ${option}
+                    ${cat.multi && isSelected ? '<i class="fas fa-check checkmark"></i>' : ''}
+                </div>
+            `;
+        });
+        
+        html += `</div></div>`;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function selectModel(type, value) {
+    if (currentCustomerIndex === null) return;
+    
+    // اگر همان گزینه انتخاب شده بود، لغو انتخاب شود
+    if (customers[currentCustomerIndex].models[type] === value) {
+        customers[currentCustomerIndex].models[type] = '';
+    } else {
+        customers[currentCustomerIndex].models[type] = value;
+    }
+    
+    saveCustomer();
+    renderModels(); // بازسازی برای نمایش تغییر رنگ
+}
+
+function toggleMultiSelect(type, value) {
+    if (currentCustomerIndex === null) return;
+    
+    if (!customers[currentCustomerIndex].models[type]) {
+        customers[currentCustomerIndex].models[type] = [];
+    }
+    
+    const index = customers[currentCustomerIndex].models[type].indexOf(value);
+    if (index === -1) {
+        customers[currentCustomerIndex].models[type].push(value);
+    } else {
+        customers[currentCustomerIndex].models[type].splice(index, 1);
+    }
+    
+    saveCustomer();
+    renderModels();
+}
+
+function renderPriceDelivery() {
+    const container = document.getElementById('priceDeliveryContainer');
+    if (!container || currentCustomerIndex === null) return;
+
+    const customer = customers[currentCustomerIndex];
+    
+    // محاسبه باقیمانده
+    const total = customer.sewingPriceAfghani || 0;
+    const received = customer.receivedAmount || 0;
+    const remaining = total - received;
+
+    let html = `
+        <div class="section-header"><h3><i class="fas fa-money-bill-wave"></i> مالی و تحویل</h3></div>
+        <div class="price-delivery-grid">
+            
+            <div class="price-section">
+                <h4>قیمت کل</h4>
+                <div class="price-input-group">
+                    <input type="number" id="sewingPrice" value="${customer.sewingPriceAfghani || ''}" placeholder="0" onchange="updatePrice()">
+                    <span class="currency">افغانی</span>
+                </div>
+            </div>
+
+            <div class="payment-section">
+                <h4>وضعیت پرداخت</h4>
+                <div class="payment-toggle" onclick="togglePayment()">
+                    <div class="payment-checkbox ${customer.paymentReceived ? 'checked' : ''}">
+                        <div class="checkbox-icon"><i class="fas fa-check"></i></div>
+                        <span>${customer.paymentReceived ? 'تسویه کامل' : 'پرداخت نشده / بیعانه'}</span>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <label style="display:block; margin-bottom:5px; color:#aaa; font-size:0.9rem;">مبلغ دریافتی (بیعانه):</label>
+                    <div class="price-input-group">
+                        <input type="number" 
+                               id="receivedAmount" 
+                               value="${customer.receivedAmount || ''}" 
+                               placeholder="0" 
+                               class="measurement-input"
+                               style="width: 100%"
+                               onchange="updateReceivedAmount(this.value)">
+                    </div>
+                    <div style="margin-top: 10px; font-size: 0.9rem; color: ${remaining > 0 ? '#ff6b6b' : '#28a745'}">
+                        باقیمانده: <b>${formatPrice(remaining)}</b> افغانی
+                    </div>
+                </div>
+            </div>
+
+            <div class="delivery-section">
+                <h4>روز تحویل</h4>
+                <div class="delivery-days">
+                    ${AppConfig.DAYS_OF_WEEK.map(day => `
+                        <button class="day-button ${customer.deliveryDay === day ? 'selected' : ''}" 
+                                onclick="setDeliveryDay('${day}')">
+                            ${day}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+function updatePrice() {
+    if (currentCustomerIndex === null) return;
+    const input = document.getElementById('sewingPrice');
+    customers[currentCustomerIndex].sewingPriceAfghani = input.value ? parseInt(input.value) : 0;
+    saveCustomer();
+    renderPriceDelivery(); // برای آپدیت باقیمانده
+}
+
+function updateReceivedAmount(value) {
+    if (currentCustomerIndex === null) return;
+    customers[currentCustomerIndex].receivedAmount = value ? parseInt(value) : 0;
+    
+    // اگر دریافتی مساوی یا بیشتر از کل بود، تیک پرداخت را بزن
+    if (customers[currentCustomerIndex].sewingPriceAfghani > 0 && 
+        customers[currentCustomerIndex].receivedAmount >= customers[currentCustomerIndex].sewingPriceAfghani) {
+        customers[currentCustomerIndex].paymentReceived = true;
+    } else {
+        customers[currentCustomerIndex].paymentReceived = false;
+    }
+    
+    saveCustomer();
+    renderPriceDelivery();
+}
+
+function togglePayment() {
+    if (currentCustomerIndex === null) return;
+    const customer = customers[currentCustomerIndex];
+    customer.paymentReceived = !customer.paymentReceived;
+    
+    // اگر دستی تیک پرداخت زده شد، دریافتی برابر کل شود
+    if (customer.paymentReceived) {
+        customer.receivedAmount = customer.sewingPriceAfghani;
+    } else {
+        customer.receivedAmount = 0;
+    }
+    
+    saveCustomer();
+    renderPriceDelivery();
+}
+
+function setDeliveryDay(day) {
+    if (currentCustomerIndex === null) return;
+    customers[currentCustomerIndex].deliveryDay = day;
+    saveCustomer();
+    renderPriceDelivery();
+}
+
+// توابع خالی برای جلوگیری از خطا در بخش سفارشات (اگر بعداً خواستید تکمیل کنید)
+function renderOrders() {
+    const container = document.getElementById('ordersContainer');
+    if (container) container.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">بخش سفارشات غیرفعال است</div>';
+}
+function addOrder() {}
+function deleteOrder() {}
