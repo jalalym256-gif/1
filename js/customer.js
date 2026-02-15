@@ -98,8 +98,8 @@ class Customer {
             errors.push('نام مشتری باید حداقل ۲ کاراکتر باشد');
         }
         
-        if (!this.phone || this.phone.trim().length < 10 || !/^\d+$/.test(this.phone)) {
-            errors.push('شماره تلفن باید حداقل ۱۰ رقم عددی باشد');
+        if (!this.phone || this.phone.trim().length < 7 || !/^\d+$/.test(this.phone)) {
+            errors.push('شماره تلفن باید حداقل ۷ رقم عددی باشد');
         }
         
         AppConfig.MEASUREMENT_FIELDS.forEach(field => {
@@ -142,6 +142,9 @@ class Customer {
         }
         
         const customer = new Customer(obj.name || '', obj.phone || '');
+        
+        // مهم: ID اصلی رو از دیتابیس بگیر — نه ID جدید تصادفی
+        if (obj.id) customer.id = obj.id;
         
         Object.keys(obj).forEach(key => {
             if (key !== 'id' && key !== 'name' && key !== 'phone') {
