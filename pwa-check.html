@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA Diagnostic</title>
+    <style>
+        body { font-family: Tahoma, Arial, sans-serif; background:#111; color:#eee; padding:20px; }
+        h2 { color:#D4AF37; }
+        .item { display:flex; align-items:center; gap:12px; padding:10px; margin:6px 0; border-radius:8px; background:#1e1e1e; }
+        .ok  { border-left:4px solid #28a745; }
+        .err { border-left:4px solid #dc3545; }
+        .warn{ border-left:4px solid #ffc107; }
+        .icon { font-size:1.4rem; }
+        .label { font-size:0.95rem; }
+        .sub { font-size:0.8rem; color:#888; }
+        #iconPreview img { width:60px; height:60px; border:2px solid #D4AF37; border-radius:8px; margin:4px; }
+    </style>
+</head>
+<body>
+<h2>🔍 PWA Diagnostic</h2>
+<div id="results"></div>
+<div id="iconPreview"></div>
+
+<script>
+const results = document.getElementById('results');
+const iconPreview = document.getElementById('iconPreview');
+
+function addItem(ok, label, sub) {
+    const cls = ok === true ? 'ok' : ok === false ? 'err' : 'warn';
+    const ico = ok === true ? '✅' : ok === false ? '❌' : '⚠️';
+    results.innerHTML += `<div class="item ${cls}">
+        <span class="icon">${ico}</span>
+        <div><div class="label">${label}</div><div class="sub">${sub||''}</div></div>
+    </div>`;
+}
+
+async function checkFile(url) {
+    try {
+        const r = await fetch(url, {cache:'no-store'});
+        return r.ok ? r : null;
+    } catch(e) {
+        return null;
+    }
+}
+
+async function run() {
+    // ۱. HTTPS
+    addItem(location.protocol === 'https:', 'HTTPS', location.href);
+
+    // ۲. Service Worker Support
+    addItem('serviceWorker' in navigator, 'Service Worker Support', navigator.userAgent.substring(0,60));
+
+    // ۳. IndexedDB Support
+    addItem(!!window.indexedDB, 'IndexedDB Support', '');
+
+    // ۴. manifest.json
+    const manifest = await checkFile('manifest.json');
+    addItem(!!manifest, 'manifest.json', manifest ? '✓ accessible' : '404 — فایل وجود نداره!');
+
+    if (manifest) {
+        const m = await manifest.json();
+
+        // ۵. start_url
+        const startUrl = await checkFile(m.start_url || 'index.html');
+        addItem(!!startUrl, `start_url: ${m.start_url}`, startUrl ? 'accessible' : '404 — صفحه شروع پیدا نشد!');
+
+        // ۶. icons
+        if (m.icons && m.icons.length > 0) {
+            addItem(true, `تعداد آیکون‌ها: ${m.icons.length}`, '');
+
+            iconPreview.innerHTML = '<h3 style="color:#D4AF37">پیش‌نمایش آیکون‌ها:</h3>';
+            let has192 = false, has512 = false;
+
+            for (const icon of m.icons) {
+                const r = await checkFile(icon.src);
+                addItem(!!r, `آیکون ${icon.sizes}`, `${icon.src} — ${r ? '✓ موجود' : '❌ پیدا نشد!'}`);
+
+                if (r) {
+                    const img = document.createElement('img');
+                    img.src = icon.src + '?t=' + Date.now();
+                    img.alt = icon.sizes;
+                    img.title = icon.src;
+                    iconPreview.appendChild(img);
+                }
+
+                if (icon.sizes === '192x192') has192 = true;
+                if (icon.sizes === '512x512') has512 = true;
+            }
+
+            addItem(has192, 'آیکون ۱۹۲x۱۹۲', has192 ? 'موجود ✓' : 'ضروری برای نصب!');
+            addItem(has512, 'آیکون ۵۱۲x۵۱۲', has512 ? 'موجود ✓' : 'ضروری برای نصب!');
+        } else {
+            addItem(false, 'آیکون', 'هیچ آیکونی در manifest نیست!');
+        }
+
+        // ۷. display
+        addItem(m.display === 'standalone', `display: ${m.display}`, "باید 'standalone' باشه");
+    }
+
+    // ۸. Service Worker وضعیت
+    if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+            const sw = reg.active || reg.installing || reg.waiting;
+            addItem(!!reg.active, 'Service Worker Active', reg.active ? `scope: ${reg.scope}` : 'هنوز active نشده');
+        } else {
+            addItem(false, 'Service Worker', 'هیچ service worker ثبت نشده!');
+        }
+    }
+
+    // ۹. BeforeInstallPrompt
+    addItem(null, 'Install Prompt', 'اگه همه موارد بالا ✅ هستن ولی install prompt نمیاد، یه بار Clear Cache کن');
+
+    results.innerHTML += `<div style="margin-top:20px; padding:15px; background:#1e1e1e; border-radius:8px; border:1px solid #D4AF37; color:#D4AF37; font-size:0.9rem;">
+        💡 این صفحه رو بعد از چک دستی پاک کن — فقط برای debug هست
+    </div>`;
+}
+
+run();
+</script>
+</body>
+</html>
